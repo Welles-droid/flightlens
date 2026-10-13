@@ -125,9 +125,14 @@ def run_packet(packet: str, desc: str) -> bool:
 
     with open(out_file, "w") as out:
         env = os.environ.copy()
+        env["HOME"] = "/home/flightlens"  # worker user home (CC credentials live there)
         env["CLAUDECODE"] = "1"  # marker; also disable interactive bits
+        # Run as the dedicated non-root user: bypassPermissions is refused for
+        # root, and a worker sandbox is cleaner anyway.
         p = subprocess.run(
-            ["claude", "-p", prompt, "--permission-mode", "bypassPermissions"],
+            ["sudo", "-u", "flightlens", "env", "HOME=/home/flightlens",
+             "/home/flightlens/.local/bin/claude", "-p", prompt,
+             "--permission-mode", "bypassPermissions"],
             cwd=REPO, stdout=out, stderr=subprocess.STDOUT, text=True,
             timeout=5400, env=env,
         )
