@@ -52,7 +52,7 @@ def _require(df: pd.DataFrame, cols: list[str], what: str) -> None:
 
 def tracking_error(
     df_att: pd.DataFrame,
-    df_pid: pd.DataFrame,
+    df_pid: pd.DataFrame | None,
     axis: str,
     threshold_deg: float = 5.0,
 ) -> TrackingStats:
@@ -67,7 +67,13 @@ def tracking_error(
     actual = axis.capitalize()
     desired = "Des" + actual
     _require(df_att, [desired, actual], "Attitude log")
-    _require(df_pid, ["Achieved"], "PID log")
+    has_achieved = df_pid is not None and "Achieved" in df_pid.columns
+    if df_pid is not None and not has_achieved and not df_pid.empty:
+        # Legacy logs: PID frame exists but logs no achieved rate. Attitude
+        # tracking is still valid; rate-loop error stats stay None.
+        df_pid = df_pid.iloc[0:0]
+    if df_pid is not None and has_achieved:
+        _require(df_pid, ["Achieved"], "PID log")
 
     err = pd.to_numeric(df_att[desired], errors="coerce") - pd.to_numeric(
         df_att[actual], errors="coerce"
@@ -88,18 +94,20 @@ def tracking_error(
     duration = float(weights.sum())
     above = float(weights[abs_err > threshold_deg].sum() / duration) if duration > 0 else 0.0
 
-    rate_cols = ["Achieved"] + (["Target"] if "Target" in df_pid.columns else [])
-    pid = pd.DataFrame({"t": time_seconds(df_pid)})
-    for c in rate_cols:
-        pid[c] = pd.to_numeric(df_pid[c], errors="coerce")
-    pid_nan = pid.isna().any(axis=1)
-    pid = pid[~pid_nan].sort_values("t", kind="stable")
-
     rate_mean = rate_max = None
-    if "Target" in pid.columns and not pid.empty:
-        merged = pd.merge_asof(att[["t"]], pid, on="t", direction="nearest")
-        rate_err = (merged["Target"] - merged["Achieved"]).abs()
-        rate_mean, rate_max = float(rate_err.mean()), float(rate_err.max())
+    pid_nan = 0
+    if df_pid is not None and not df_pid.empty:
+        rate_cols = ["Achieved"] + (["Target"] if "Target" in df_pid.columns else [])
+        pid = pd.DataFrame({"t": time_seconds(df_pid)})
+        for c in rate_cols:
+            pid[c] = pd.to_numeric(df_pid[c], errors="coerce")
+        pid_nan_mask = pid.isna().any(axis=1)
+        pid_nan = int(pid_nan_mask.sum())
+        pid = pid[~pid_nan_mask].sort_values("t", kind="stable")
+        if "Target" in pid.columns and not pid.empty:
+            merged = pd.merge_asof(att[["t"]], pid, on="t", direction="nearest")
+            rate_err = (merged["Target"] - merged["Achieved"]).abs()
+            rate_mean, rate_max = float(rate_err.mean()), float(rate_err.max())
 
     return TrackingStats(
         axis=axis,
@@ -114,5 +122,5 @@ def tracking_error(
         nan_dropped=nan_dropped,
         rate_mean_abs_dps=rate_mean,
         rate_max_abs_dps=rate_max,
-        pid_nan_dropped=int(pid_nan.sum()),
+        pid_nan_dropped=pid_nan,
     )

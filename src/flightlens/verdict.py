@@ -93,10 +93,23 @@ def _find_att(frames: dict[str, pd.DataFrame], axis: str) -> pd.DataFrame:
     raise FlightLensError(f"No attitude data for {axis}")
 
 
-def _find_pid(frames: dict[str, pd.DataFrame], axis: str) -> pd.DataFrame:
+def _find_pid(frames: dict[str, pd.DataFrame], axis: str) -> pd.DataFrame | None:
+    """Best rate-PID frame for ``axis`` (achieved-rate preferred, target-only OK).
+
+    Legacy logs may log no achieved rate at all; attitude tracking still works
+    there, so a target-only frame qualifies (oscillation check then reports
+    insufficient data rather than killing the whole verdict).
+    """
+    best: pd.DataFrame | None = None
     for name, df in frames.items():
-        if _pid_axis(name) == axis and "Achieved" in df.columns and not df.empty:
+        if _pid_axis(name) != axis or df.empty:
+            continue
+        if "Achieved" in df.columns:
             return df
+        if "Target" in df.columns:
+            best = best if best is not None else df
+    if best is not None:
+        return best
     raise FlightLensError(f"No rate-PID data for {axis}")
 
 
@@ -146,8 +159,12 @@ def _tracking_advice(axis: str, t: TrackingStats) -> tuple[str, str]:
 def _axis_verdict(frames: dict[str, pd.DataFrame], axis: str) -> AxisVerdict:
     df_pid = _find_pid(frames, axis)
     tracking = tracking_error(_find_att(frames, axis), df_pid, axis)
-    pid = df_pid.assign(_t=time_seconds(df_pid)).dropna(subset=["_t"]).sort_values("_t")
-    osc = detect_oscillation(pid["Achieved"], estimate_fs(pid["_t"]))
+    if df_pid is not None and "Achieved" in df_pid.columns:
+        pid = df_pid.assign(_t=time_seconds(df_pid)).dropna(subset=["_t"]).sort_values("_t")
+        osc = detect_oscillation(pid["Achieved"], estimate_fs(pid["_t"]))
+    else:
+        # No achieved-rate logging (legacy firmware): attitude tracking only.
+        osc = OscillationResult(insufficient_data=True)
 
     track_grade = _tracking_grade(tracking)
     grade = _worst([_OSC_GRADE[osc.severity], track_grade])

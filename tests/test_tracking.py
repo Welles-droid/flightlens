@@ -78,11 +78,16 @@ def test_missing_columns_raise():
     with pytest.raises(FlightLensError):
         tracking_error(att.drop(columns="DesRoll"), pid, "roll")
     with pytest.raises(FlightLensError):
-        tracking_error(att, pid.drop(columns="Achieved"), "roll")
-    with pytest.raises(FlightLensError):
         tracking_error(att.drop(columns="TimeUS"), pid, "roll")
     with pytest.raises(FlightLensError):
         tracking_error(att, pid, "sideways")
+
+
+def test_pid_without_achieved_rate_degrades_to_attitude_only():
+    att, pid = _frames()
+    stats = tracking_error(att, pid.drop(columns="Achieved"), "roll")
+    assert stats.rate_mean_abs_dps is None
+    assert stats.rate_max_abs_dps is None
 
 
 def test_detects_alternative_time_column():

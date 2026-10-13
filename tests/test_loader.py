@@ -120,13 +120,15 @@ def test_normalise_leaves_canonical_columns_alone(clean_bin):
     assert list(again["PIDR"].columns) == list(frames["PIDR"].columns)
 
 
-def test_pid_without_achieved_rate_is_not_an_available_axis():
+def test_pid_without_achieved_rate_still_counts_as_available_axis():
     import pandas as pd
 
     # Pre-4.0 firmware logs only the demand ("Des"), not the achieved rate.
+    # Attitude tracking (Des vs actual) is still analysable, so the axis is
+    # available; rate-loop error stats are simply None.
     att = pd.DataFrame({"TimeUS": [0], "DesRoll": [0.0], "Roll": [0.0]})
     pid = pd.DataFrame({"TimeUS": [0], "Des": [1.0], "P": [0.1]})
-    assert available_axes({"ATT": att, "PIDR": pid}) == []
+    assert available_axes({"ATT": att, "PIDR": pid}) == ["roll"]
 
 
 def test_rate_message_stands_in_when_pid_logging_is_off():

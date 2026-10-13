@@ -116,11 +116,16 @@ def _has_attitude(frames: dict[str, pd.DataFrame], axis: str) -> bool:
 
 
 def available_axes(frames: dict[str, pd.DataFrame]) -> list[str]:
-    """Axes (in roll/pitch/yaw order) with attitude and achieved-rate data."""
+    """Axes (in roll/pitch/yaw order) with attitude and a rate-PID frame.
+
+    Legacy logs (pre-4.0 firmware) often log PID<T> without an achieved rate
+    and without a RATE message; attitude tracking (Des vs actual) is still
+    analysable there, so a PID frame with only Target qualifies.
+    """
     frames = normalise_rate_pid(frames)
     pid_axes = {
         axis
         for name, df in frames.items()
-        if (axis := _pid_axis(name)) is not None and "Achieved" in df.columns and not df.empty
+        if (axis := _pid_axis(name)) is not None and "Target" in df.columns and not df.empty
     }
     return [a for a in AXES if a in pid_axes and _has_attitude(frames, a)]
