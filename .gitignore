@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 tests/fixtures/*.BIN
 *.egg-info/
+tests/fixtures/real/
