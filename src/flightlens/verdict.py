@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 import pandas as pd
 
 from flightlens import FlightLensError
-from flightlens.loader import _pid_axis, available_axes
+from flightlens.loader import _pid_axis, available_axes, normalise_rate_pid
 from flightlens.oscillation import OscillationResult, detect_oscillation, estimate_fs
 from flightlens.tracking import TrackingStats, time_seconds, tracking_error
 from flightlens.vibration import vibe_verdict
@@ -95,7 +95,7 @@ def _find_att(frames: dict[str, pd.DataFrame], axis: str) -> pd.DataFrame:
 
 def _find_pid(frames: dict[str, pd.DataFrame], axis: str) -> pd.DataFrame:
     for name, df in frames.items():
-        if _pid_axis(name) == axis and not df.empty:
+        if _pid_axis(name) == axis and "Achieved" in df.columns and not df.empty:
             return df
     raise FlightLensError(f"No rate-PID data for {axis}")
 
@@ -176,6 +176,7 @@ def build_verdict(
     Raises FlightLensError when no axis can be analysed or a requested axis is
     missing from the log.
     """
+    frames = normalise_rate_pid(frames)
     available = available_axes(frames)
     if axes is None:
         axes = available

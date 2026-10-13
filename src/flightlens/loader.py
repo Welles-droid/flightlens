@@ -15,6 +15,11 @@ _DATAFLASH_MAGIC = b"\xa3\x95\x80"
 
 AXES = ("roll", "pitch", "yaw")
 _AXIS_LETTER = {"R": "roll", "P": "pitch", "Y": "yaw"}
+_LETTER = {axis: letter for letter, axis in _AXIS_LETTER.items()}
+
+# Firmware PID column names -> the canonical names the analysers use. Tar/Act
+# is ArduPilot 4.x; older firmware logs only the demand as "Des".
+_PID_COLUMNS = {"Tar": "Target", "Des": "Target", "Act": "Achieved"}
 
 
 def load(path: str | os.PathLike) -> dict[str, pd.DataFrame]:
@@ -47,7 +52,9 @@ def load(path: str | os.PathLike) -> dict[str, pd.DataFrame]:
 
     if not rows:
         raise FlightLensError("Unsupported or corrupt log")
-    return {name: pd.DataFrame(r, columns=columns[name]) for name, r in rows.items()}
+    return normalise_rate_pid(
+        {name: pd.DataFrame(r, columns=columns[name]) for name, r in rows.items()}
+    )
 
 
 def _pid_axis(name: str) -> str | None:
@@ -62,6 +69,43 @@ def _pid_axis(name: str) -> str | None:
     return None
 
 
+def _rename_pid_columns(df: pd.DataFrame) -> pd.DataFrame:
+    renames: dict[str, str] = {}
+    for old, new in _PID_COLUMNS.items():
+        if old in df.columns and new not in df.columns and new not in renames.values():
+            renames[old] = new
+    return df.rename(columns=renames) if renames else df
+
+
+def normalise_rate_pid(frames: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """Give every rate-PID frame canonical ``Target``/``Achieved`` columns.
+
+    Renames firmware column names, and when an axis has no PID frame with an
+    achieved rate (PID logging off, or pre-4.0 firmware) derives ``PID<X>``
+    from the RATE message's ``<X>Des``/``<X>`` columns. Returns a new dict;
+    idempotent.
+    """
+    out = {
+        name: _rename_pid_columns(df) if _pid_axis(name) else df for name, df in frames.items()
+    }
+    rate = out.get("RATE")
+    for axis in AXES:
+        letter = _LETTER[axis]
+        if rate is None or {letter + "Des", letter} - set(rate.columns):
+            continue
+        if any(
+            _pid_axis(name) == axis and "Achieved" in df.columns and not df.empty
+            for name, df in out.items()
+        ):
+            continue
+        for name in [n for n in out if _pid_axis(n) == axis]:
+            del out[name]  # unusable without an achieved rate
+        out["PID" + letter] = pd.DataFrame(
+            {"TimeUS": rate["TimeUS"], "Target": rate[letter + "Des"], "Achieved": rate[letter]}
+        )
+    return out
+
+
 def _has_attitude(frames: dict[str, pd.DataFrame], axis: str) -> bool:
     actual = axis.capitalize()
     desired = "Des" + actual
@@ -72,10 +116,11 @@ def _has_attitude(frames: dict[str, pd.DataFrame], axis: str) -> bool:
 
 
 def available_axes(frames: dict[str, pd.DataFrame]) -> list[str]:
-    """Axes (in roll/pitch/yaw order) with both attitude and PID data."""
+    """Axes (in roll/pitch/yaw order) with attitude and achieved-rate data."""
+    frames = normalise_rate_pid(frames)
     pid_axes = {
         axis
         for name, df in frames.items()
-        if (axis := _pid_axis(name)) is not None and not df.empty
+        if (axis := _pid_axis(name)) is not None and "Achieved" in df.columns and not df.empty
     }
     return [a for a in AXES if a in pid_axes and _has_attitude(frames, a)]

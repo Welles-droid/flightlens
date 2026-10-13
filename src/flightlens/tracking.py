@@ -69,13 +69,11 @@ def tracking_error(
     _require(df_att, [desired, actual], "Attitude log")
     _require(df_pid, ["Achieved"], "PID log")
 
-    att = pd.DataFrame(
-        {
-            "t": time_seconds(df_att),
-            "err": pd.to_numeric(df_att[desired], errors="coerce")
-            - pd.to_numeric(df_att[actual], errors="coerce"),
-        }
+    err = pd.to_numeric(df_att[desired], errors="coerce") - pd.to_numeric(
+        df_att[actual], errors="coerce"
     )
+    # Wrap into [-180, 180) so a heading crossing north isn't a ~360° error.
+    att = pd.DataFrame({"t": time_seconds(df_att), "err": (err + 180) % 360 - 180})
     nan_mask = att.isna().any(axis=1)
     nan_dropped = int(nan_mask.sum())
     att = att[~nan_mask].sort_values("t", kind="stable").reset_index(drop=True)

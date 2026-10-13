@@ -95,3 +95,63 @@ def test_available_axes_requires_attitude_pair():
     att = pd.DataFrame({"TimeUS": [0], "Roll": [0.0]})  # no DesRoll
     assert available_axes({"ATT": att, "PIDR": pid}) == []
     assert available_axes({}) == []
+
+
+# --- Real-firmware PID layouts (found via the real-log integration test) -----
+
+
+def test_normalise_maps_firmware_pid_columns_to_target_achieved():
+    import pandas as pd
+
+    from flightlens.loader import normalise_rate_pid
+
+    pid = pd.DataFrame({"TimeUS": [0], "Tar": [2.0], "Act": [1.5], "Err": [0.5]})
+    frames = normalise_rate_pid({"PIDR": pid})
+    assert frames["PIDR"]["Target"].iloc[0] == 2.0
+    assert frames["PIDR"]["Achieved"].iloc[0] == 1.5
+    assert list(pid.columns) == ["TimeUS", "Tar", "Act", "Err"]  # input untouched
+
+
+def test_normalise_leaves_canonical_columns_alone(clean_bin):
+    from flightlens.loader import normalise_rate_pid
+
+    frames = load(clean_bin)
+    again = normalise_rate_pid(frames)
+    assert list(again["PIDR"].columns) == list(frames["PIDR"].columns)
+
+
+def test_pid_without_achieved_rate_is_not_an_available_axis():
+    import pandas as pd
+
+    # Pre-4.0 firmware logs only the demand ("Des"), not the achieved rate.
+    att = pd.DataFrame({"TimeUS": [0], "DesRoll": [0.0], "Roll": [0.0]})
+    pid = pd.DataFrame({"TimeUS": [0], "Des": [1.0], "P": [0.1]})
+    assert available_axes({"ATT": att, "PIDR": pid}) == []
+
+
+def test_rate_message_stands_in_when_pid_logging_is_off():
+    import pandas as pd
+
+    from flightlens.loader import normalise_rate_pid
+
+    att = pd.DataFrame({"TimeUS": [0, 1], "DesRoll": [0.0] * 2, "Roll": [0.0] * 2,
+                        "DesPitch": [0.0] * 2, "Pitch": [0.0] * 2,
+                        "DesYaw": [0.0] * 2, "Yaw": [0.0] * 2})
+    rate = pd.DataFrame({"TimeUS": [0, 1], "RDes": [3.0, 4.0], "R": [2.0, 3.5],
+                         "PDes": [0.0] * 2, "P": [0.0] * 2,
+                         "YDes": [0.0] * 2, "Y": [0.0] * 2})
+    frames = normalise_rate_pid({"ATT": att, "RATE": rate})
+    assert available_axes(frames) == ["roll", "pitch", "yaw"]
+    assert list(frames["PIDR"]["Target"]) == [3.0, 4.0]
+    assert list(frames["PIDR"]["Achieved"]) == [2.0, 3.5]
+
+
+def test_build_verdict_on_rate_only_frames(clean_bin):
+    from flightlens.verdict import build_verdict
+
+    frames = load(clean_bin)
+    pidr = frames.pop("PIDR")
+    frames.pop("PIDP")
+    frames["RATE"] = pidr.rename(columns={"Target": "RDes", "Achieved": "R"})
+    v = build_verdict(frames)
+    assert [a.axis for a in v.axes] == ["roll"]

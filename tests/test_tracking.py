@@ -99,3 +99,12 @@ def test_on_synthetic_log(clean_bin):
     assert s.samples == 2000
     assert s.mean_abs_deg < 0.1
     assert s.rate_mean_abs_dps == pytest.approx(0.8, abs=0.1)
+
+
+def test_heading_error_wraps_across_north():
+    # Desired 359°, actual 1° is a 2° error, not 358°.
+    n = 100
+    att = pd.DataFrame({"TimeUS": np.arange(n) * 10_000, "DesYaw": [359.0] * n, "Yaw": [1.0] * n})
+    pid = pd.DataFrame({"TimeUS": np.arange(n) * 10_000, "Achieved": [0.0] * n})
+    stats = tracking_error(att, pid, "yaw")
+    assert stats.max_abs_deg == pytest.approx(2.0)
