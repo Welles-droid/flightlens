@@ -17,7 +17,7 @@ Each automation run:
 - [x] Packet B (done 2026-10-13T07:48:51Z): Tasks 1+2 — synthetic fixture generator + loader
 - [x] Packet C (done 2026-10-13T07:52:11Z): Tasks 3+4+5 — tracking, oscillation, vibration
 - [x] Packet D (done 2026-10-13T08:07:33Z): Tasks 6+7 — verdict engine + CLI/report
-- [ ] Packet E: Task 8+9 — real-log integration test + README/CI push
+- [x] Packet E (done 2026-10-13T08:51:36Z): Task 8+9 — real-log integration test + README/CI push
 
 ## Current progress
 
@@ -82,6 +82,26 @@ src/flightlens/report.py
 src/flightlens/verdict.py
 tests/test_cli.py
 tests/test_verdict.py
+- gates: see above
+- status: COMMIT_OK
+- exact next action: dispatch next packet
+
+
+- UTC timestamp: 2026-10-13T08:20:16Z
+- packet: Packet E — Task 8+9 — real-log integration test + README/CI push
+- commit: de5e54a docs: add README with quickstart, roadmap, and MIT license
+- changed files: LICENSE
+README.md
+pyproject.toml
+- gates: see above
+- status: BLOCKED
+- exact next action: ensure claude auth is live, or re-dispatch
+
+
+- UTC timestamp: 2026-10-13T08:51:36Z
+- packet: Packet E — Task 8+9 — real-log integration test + README/CI push
+- commit: 0e55e25 ci: run unit tests on Python 3.11 with GitHub Actions
+- changed files: .github/workflows/ci.yml
 - gates: see above
 - status: COMMIT_OK
 - exact next action: dispatch next packet
