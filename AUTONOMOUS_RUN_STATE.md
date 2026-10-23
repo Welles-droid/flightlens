@@ -106,3 +106,16 @@ pyproject.toml
 - status: COMMIT_OK
 - exact next action: dispatch next packet
 
+
+- UTC timestamp: 2026-10-23T20:04:00Z
+- packet: hygiene catch-up — run-record for previously unlogged commit
+- commit: 9a27466 fix: analyse legacy logs without achieved rate (pre-4.0 PID<T>, no RATE msg)
+- changed files:
+  src/flightlens/loader.py
+  src/flightlens/tracking.py
+  src/flightlens/verdict.py
+  tests/test_loader.py
+  tests/test_tracking.py
+- gates: pytest 75 passed, 3 deselected (verified 2026-10-23)
+- status: COMMIT_OK (retro-logged; orchestrator in hygiene mode — all plan packets done)
+- exact next action: next growth packet needs Barish input (market feedback / v0.2 scope) or new plan doc
